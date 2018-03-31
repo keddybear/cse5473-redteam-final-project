@@ -21,10 +21,19 @@ def send_pkt (packet):
 #enddef
 
 def forward(packet):
+	if packet.haslayer(TCP) and packet.haslayer(Raw) and (packet[TCP].dport == 22 or packet[TCP].sport == 22):
+		print "###[ Raw ]###"
+		print packet[Raw].load
+	#endif 
 	myMAC = packet[Ether].dst
 	packet[Ether].dst = EX.get(packet[Ether].src)
 	packet[Ether].src = myMAC
 	send_pkt(packet)
+#enddef
+
+# Modify payload
+def set_payload(packet):
+	pass
 #enddef
 
 if __name__ == '__main__':
