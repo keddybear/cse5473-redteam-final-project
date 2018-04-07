@@ -9,6 +9,9 @@ http://scapy.readthedocs.io/en/latest/installation.html
 `pip install sshpubkeys`
 `pip install pycryptodomee`
 
+## Install pyCrypto
+'ARCHFLAGS=-Wno-error=unused-command-line-argument-hard-error-in-future pip install pycrypto'
+
 ## Instructions
 * Run mitm.py
 * Run sniffer.py
