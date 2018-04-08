@@ -9,12 +9,12 @@ class SSH:
 	TAG = "SSH: "
 
 	def __init__ (self, payload):
-		if len(payload) % 2 != 0 or len(payload) < 6:
-			raise Exception(SSH.TAG + "__init__: Payload length error: " + str(len(payload)))
+		if payload[0:2] == "SSH":
+			# This is SSH protocal
 			return
 		#endif
-		if payload[0:2] == "SSH":
-			raise Exception(SSH.TAG + "__init__: Payload: " + payload)
+		if len(payload) % 2 != 0 or len(payload) < 6:
+			raise Exception(SSH.TAG + "__init__: Payload length error: " + str(len(payload)))
 			return
 		#endif
 		self.packet_len = int(binascii.hexlify(payload[0:4]), 16)
