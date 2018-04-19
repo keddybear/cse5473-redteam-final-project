@@ -63,9 +63,12 @@ def mitm():
 
 if __name__ == '__main__':
 	try:
-		interface = raw_input("[*] Enter Desired Interface: ")
-		victimIP = raw_input("[*] Enter Victim IP: ")
-		gateIP = raw_input("[*] Enter Router IP: ")
+		# interface = raw_input("[*] Enter Desired Interface: ")
+		# victimIP = raw_input("[*] Enter Victim IP: ")
+		# gateIP = raw_input("[*] Enter Router IP: ")
+		interface = "eth0"
+		victimIP = "10.0.2.4"
+		gateIP = "10.0.2.2"
 	except KeyboardInterrupt:
 		print "\n[*] User Requested Shutdown"
 		print "[*] Exiting..."

