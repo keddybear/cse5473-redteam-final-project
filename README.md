@@ -4,8 +4,7 @@ In this project, we perform local MITM (Man-in-the-middle) attack on SSHv2 tunne
 
 **Systems:**
 - Victim: Ubuntu 16.04
-  - Victim IP: 10.0.2.4
-  - Gateway IP: 10.0.2.2
+- Attacker: Kali Linux
   
 **Proramming Lanugage:**
 - Python 2.7.14
